@@ -2,12 +2,16 @@
 
 namespace Dimsav\Translatable;
 
+use App\ClinicalStudySubgroup;
+use App\ClinicalStudySubgroupTranslation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Dimsav\Translatable\Exception\LocalesNotDefinedException;
+use Illuminate\Support\Facades\Log;
 
 trait Translatable
 {
@@ -66,6 +70,7 @@ trait Translatable
         $fallbackLocale = $this->getFallbackLocale($locale);
 
         if ($translation = $this->getTranslationByLocaleKey($locale)) {
+
             return $translation;
         }
         if ($withFallback && $fallbackLocale) {
@@ -448,17 +453,62 @@ trait Translatable
         if (! $this->relationLoaded('translations')) {
             return $saved;
         }
+            foreach ($this->translations as $translation) {
+                if ($saved && $this->isTranslationDirty($translation)) {
+                    //hack to fix id not getting loaded?
+                    if($translation instanceof ClinicalStudySubgroupTranslation) {
+                        $clin_stud_sub_id = ClinicalStudySubgroup::where('subgroup_id',$this->subgroup_id)->where('clinical_study_id',$this->clinical_study_id)->first()->id;
+                        try{
+                            if (!empty($connectionName = $this->getConnectionName())) {
+                                $translation->setConnection($connectionName);
+                            }
+                            $incoming_st_sub_btca_id = $translation->study_subgroup_bigtincan_id;
+                            $trans = ClinicalStudySubgroupTranslation::where('locale',$translation->locale)->where('clinical_study_subgroup_id',$clin_stud_sub_id)->firstOrFail();
+                            $trans->study_subgroup_bigtincan_id = $incoming_st_sub_btca_id;//replace the data
+                            $translation = $trans;
+                            $translation->setAttribute($this->getRelationKey(), $this->getKey());
+                            $translation->setAttribute('clinical_study_subgroup_id',$clin_stud_sub_id);
+                            $saved = $translation->save();
 
-        foreach ($this->translations as $translation) {
-            if ($saved && $this->isTranslationDirty($translation)) {
-                if (! empty($connectionName = $this->getConnectionName())) {
-                    $translation->setConnection($connectionName);
+                        }
+                        catch(ModelNotFoundException $e)
+                        {
+                            if (!empty($connectionName = $this->getConnectionName())) {
+                                $translation->setConnection($connectionName);
+                            }
+                            $translation->setAttribute('clinical_study_subgroup_id',$clin_stud_sub_id);
+                            if($this->getKey() != null)
+                            {
+                                $translation->setAttribute($this->getRelationKey(), $this->getKey());
+                            }
+                            $saved = $translation->save();
+                        }
+                    }
+                    else{
+                        if (! empty($connectionName = $this->getConnectionName())) {
+                            $translation->setConnection($connectionName);
+                        }
+
+                        $translation->setAttribute($this->getRelationKey(), $this->getKey());
+                        $saved = $translation->save();
+                    }
                 }
+                else{
+                    if($translation instanceof ClinicalStudySubgroupTranslation) {
+                        $clin_stud_sub_id = ClinicalStudySubgroup::where('subgroup_id',$this->subgroup_id)->where('clinical_study_id',$this->clinical_study_id)->first()->id;
 
-                $translation->setAttribute($this->getRelationKey(), $this->getKey());
-                $saved = $translation->save();
+                            if (!empty($connectionName = $this->getConnectionName())) {
+                                $translation->setConnection($connectionName);
+                            }
+                            $trans = ClinicalStudySubgroupTranslation::where('locale',$translation->locale)->where('clinical_study_subgroup_id',$clin_stud_sub_id)->firstOrFail();
+
+                            $translation = $trans;
+                            $translation->setAttribute($this->getRelationKey(), $this->getKey());
+                            $translation->setAttribute('clinical_study_subgroup_id',$clin_stud_sub_id);
+                            $saved = $translation->save();
+                    }
+                }
             }
-        }
 
         return $saved;
     }

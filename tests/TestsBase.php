@@ -54,7 +54,7 @@ class TestsBase extends TestCase
 
     protected function getEnvironmentSetUp($app)
     {
-        $app['path.base'] = __DIR__.'/..';
+        $app['path.base'] = __DIR__ . '/laravel-translatable';
         $app['config']->set('database.default', 'mysql');
         $app['config']->set('database.connections.mysql', [
             'driver'   => 'mysql',
